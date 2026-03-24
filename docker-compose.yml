@@ -1,0 +1,13 @@
+services:
+  wb-proxy:
+    build: .
+    container_name: workbuddy-proxy
+    ports:
+      - "19090:19090"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PROXY_PORT=19090
+      - PROXY_API_KEY=wb-proxy-key
+      - CDP_URL=http://host.docker.internal:9222
+    restart: unless-stopped
