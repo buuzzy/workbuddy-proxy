@@ -98,8 +98,10 @@ def main():
     if not session:
         sys.exit(1)
 
-    access_token = session.get("accessToken", "")
-    refresh_token = session.get("refreshToken", "")
+    # 兼容新版（嵌套 auth）和旧版（扁平）结构
+    auth = session.get("auth", session)
+    access_token = auth.get("accessToken", "")
+    refresh_token = auth.get("refreshToken", "")
 
     if not access_token:
         print("未获取到 accessToken")

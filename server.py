@@ -247,9 +247,11 @@ class TokenManager:
                 value = result.get("result", {}).get("result", {}).get("value", "")
                 if value:
                     session = json.loads(value)
-                    if session.get("accessToken"):
-                        self.access_token = session["accessToken"]
-                        self.refresh_token = session.get("refreshToken", "")
+                    # 兼容新版（嵌套 auth）和旧版（扁平）结构
+                    auth = session.get("auth", session)
+                    if auth.get("accessToken"):
+                        self.access_token = auth["accessToken"]
+                        self.refresh_token = auth.get("refreshToken", "")
                         self._apply_claims()
                         log.info("Token extracted from CDP successfully")
                         self._log_token_info()
