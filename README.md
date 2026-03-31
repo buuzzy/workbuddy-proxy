@@ -20,15 +20,33 @@
 
 ---
 
-## 快速开始
+## 前置准备
 
-### 前提条件
+根据你的操作系统，准备以下环境：
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)（macOS / Windows 均可）
-- WorkBuddy 已安装并**登录过**
-- Python 3.10+（仅首次提取 Token 时需要）
+### Windows 11
+
+| 项目 | 说明 |
+|------|------|
+| **Python 3.10+** | 从 [python.org](https://www.python.org/downloads/) 下载安装，**安装时勾选 "Add Python to PATH"** |
+| **Git** | 从 [git-scm.com](https://git-scm.com/download/win) 下载安装 |
+| **WorkBuddy** | 已安装并**至少登录过一次**（确保有有效会话） |
+| **Docker Desktop**（可选） | 如需 Docker 方式运行，从 [docker.com](https://www.docker.com/products/docker-desktop/) 安装，并在 Settings → General 中勾选 **"Start Docker Desktop when you sign in"** |
+
+> **验证 Python 安装**：打开 PowerShell，执行 `python --version`，应输出 `Python 3.10.x` 或更高版本。
+
+### macOS
+
+| 项目 | 说明 |
+|------|------|
+| **Python 3.10+** | 推荐通过 `brew install python` 安装 |
+| **Git** | macOS 自带，或通过 `brew install git` 安装 |
+| **WorkBuddy** | 已安装并**至少登录过一次** |
+| **Docker Desktop**（可选） | 从 [docker.com](https://www.docker.com/products/docker-desktop/) 安装 |
 
 ---
+
+## 快速开始
 
 ### 第一步：克隆仓库
 
@@ -43,7 +61,31 @@ cd workbuddy-proxy
 
 Token 的有效期约 **1 年**，正常情况下提取一次即可长期使用。
 
-#### macOS
+<details>
+<summary><b>Windows（PowerShell）</b></summary>
+
+```powershell
+# 1. 以调试模式启动 WorkBuddy
+& "$env:LOCALAPPDATA\Programs\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9222
+
+# 如果上面的路径不对，可以这样查找 WorkBuddy 位置：
+# Get-Command WorkBuddy -ErrorAction SilentlyContinue | Select-Object Source
+# 或者右键 WorkBuddy 快捷方式 → 属性 → 查看「目标」路径
+# 常见路径：
+#   C:\Users\<用户名>\AppData\Local\Programs\WorkBuddy\WorkBuddy.exe
+#   C:\Program Files\WorkBuddy\WorkBuddy.exe
+
+# 2. 新开一个 PowerShell 窗口，安装依赖并提取 Token
+python -m pip install httpx websockets pyjwt
+python extract_token.py --save
+
+# 3. 看到 "已保存到 data\token.json" 后，可以关闭 WorkBuddy
+```
+
+</details>
+
+<details>
+<summary><b>macOS（Terminal）</b></summary>
 
 ```bash
 # 1. 以调试模式启动 WorkBuddy
@@ -56,25 +98,7 @@ python3 extract_token.py --save
 # 3. 看到 "已保存到 data/token.json" 后，可以关闭 WorkBuddy
 ```
 
-#### Windows
-
-```powershell
-# 1. 以调试模式启动 WorkBuddy（在 PowerShell 中运行）
-& "$env:LOCALAPPDATA\Programs\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9222
-
-# 如果上面的路径不对，可以这样找到 WorkBuddy 的安装位置：
-# Get-Command WorkBuddy -ErrorAction SilentlyContinue | Select-Object Source
-# 或者右键 WorkBuddy 快捷方式 → 属性 → 查看「目标」路径
-# 常见路径：
-#   C:\Users\<用户名>\AppData\Local\Programs\WorkBuddy\WorkBuddy.exe
-#   C:\Program Files\WorkBuddy\WorkBuddy.exe
-
-# 2. 新开一个 PowerShell，安装依赖并提取 Token
-pip install httpx websockets pyjwt
-python extract_token.py --save
-
-# 3. 看到 "已保存到 data\token.json" 后，可以关闭 WorkBuddy
-```
+</details>
 
 > **提取失败？** 检查以下几点：
 > - WorkBuddy 是否已登录（打开 WorkBuddy 能正常使用 AI 功能）
@@ -85,20 +109,62 @@ python extract_token.py --save
 
 ### 第三步：启动服务
 
+有两种方式可选：**Docker（推荐）** 或 **直接运行 Python**。
+
+#### 方式一：Docker（推荐）
+
+适用于 Windows 和 macOS，安装好 Docker Desktop 后：
+
 ```bash
 docker compose up -d
 ```
 
 看到 `Container workbuddy-proxy Started` 即表示启动成功。
 
-验证服务状态：
+#### 方式二：直接运行 Python
+
+<details>
+<summary><b>Windows</b></summary>
+
+```powershell
+# 安装依赖
+python -m pip install -r requirements.txt
+
+# 启动服务
+python server.py
+
+# 或使用一键启动脚本
+.\start.ps1
+.\start.ps1 -Port 8080   # 指定端口
+```
+
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
 
 ```bash
-# macOS / Linux
-curl http://127.0.0.1:19090/health
+# 安装依赖
+pip3 install -r requirements.txt
 
+# 启动服务
+python3 server.py
+
+# 或使用一键启动脚本
+./start.sh
+./start.sh --port 8080   # 指定端口
+```
+
+</details>
+
+#### 验证服务状态
+
+```powershell
 # Windows PowerShell
 Invoke-RestMethod http://127.0.0.1:19090/health
+
+# macOS / Linux
+curl http://127.0.0.1:19090/health
 ```
 
 返回 `{"status":"ok","has_token":true,"expired":false}` 即表示一切正常。
@@ -118,7 +184,108 @@ Invoke-RestMethod http://127.0.0.1:19090/health
 
 ---
 
+## Windows 持久化运行
+
+在 Windows 主机上让服务**开机自启、后台常驻**，有以下几种方案：
+
+### 方案一：Docker Desktop 自动启动（最简单）
+
+Docker Desktop 默认会随 Windows 启动，容器配置了 `restart: unless-stopped`，所以 **开机后服务自动恢复**，无需额外配置。
+
+确认设置：
+1. Docker Desktop → Settings → General → 勾选 **"Start Docker Desktop when you sign in"**
+2. 确认容器已用 `docker compose up -d` 启动过
+
+之后每次开机，容器自动启动。
+
+### 方案二：Windows 任务计划程序（不用 Docker）
+
+适合不想装 Docker、直接用 Python 运行的场景。
+
+**1. 创建启动脚本**
+
+项目已包含 `start.ps1`，它会自动检查依赖、提取 Token 并启动服务。
+
+**2. 配置任务计划**
+
+打开 PowerShell（管理员），执行以下命令创建开机自启任务：
+
+```powershell
+$action = New-ScheduledTaskAction `
+    -Execute "powershell.exe" `
+    -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"C:\path\to\workbuddy-proxy\start.ps1`"" `
+    -WorkingDirectory "C:\path\to\workbuddy-proxy"
+
+$trigger = New-ScheduledTaskTrigger -AtLogon
+
+$settings = New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries `
+    -DontStopIfGoingOnBatteries `
+    -StartWhenAvailable `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1)
+
+Register-ScheduledTask `
+    -TaskName "WorkBuddyProxy" `
+    -Action $action `
+    -Trigger $trigger `
+    -Settings $settings `
+    -Description "WorkBuddy OpenAI-compatible reverse proxy"
+```
+
+> **注意**：将 `C:\path\to\workbuddy-proxy` 替换为你的实际项目路径。
+
+**管理任务：**
+
+```powershell
+# 查看任务状态
+Get-ScheduledTask -TaskName "WorkBuddyProxy"
+
+# 手动启动
+Start-ScheduledTask -TaskName "WorkBuddyProxy"
+
+# 停止任务
+Stop-ScheduledTask -TaskName "WorkBuddyProxy"
+
+# 删除任务
+Unregister-ScheduledTask -TaskName "WorkBuddyProxy" -Confirm:$false
+```
+
+### 方案三：NSSM 注册为 Windows 服务（最稳定）
+
+[NSSM](https://nssm.cc/) 可以将任意程序注册为 Windows 服务，支持自动重启、日志记录等。
+
+```powershell
+# 1. 下载 NSSM（https://nssm.cc/download）
+# 2. 解压后将 nssm.exe 放到 PATH 目录（如 C:\Windows）
+
+# 3. 安装服务（交互式配置）
+nssm install WorkBuddyProxy
+
+# 在弹出的界面中配置：
+#   Path:              C:\Users\<用户名>\AppData\Local\Programs\Python\Python312\python.exe
+#   Startup directory: C:\path\to\workbuddy-proxy
+#   Arguments:         server.py
+#   在 "Exit actions" 标签页，设置 Restart delay: 5000 (毫秒)
+
+# 4. 启动服务
+nssm start WorkBuddyProxy
+```
+
+**管理服务：**
+
+```powershell
+nssm status WorkBuddyProxy    # 查看状态
+nssm restart WorkBuddyProxy   # 重启
+nssm stop WorkBuddyProxy      # 停止
+nssm remove WorkBuddyProxy    # 删除服务
+```
+
+---
+
 ## 日常使用
+
+### Docker 方式
 
 服务配置了 `restart: unless-stopped`，**开机后 Docker Desktop 自动启动容器**，无需手动操作。
 
@@ -129,6 +296,13 @@ Invoke-RestMethod http://127.0.0.1:19090/health
 | 重启 | `docker compose restart` |
 | 停止 | `docker compose down` |
 | 启动 | `docker compose up -d` |
+
+### Python 直接运行方式
+
+| 操作 | Windows (PowerShell) | macOS (Terminal) |
+|------|---------------------|------------------|
+| 启动 | `.\start.ps1` 或 `python server.py` | `./start.sh` 或 `python3 server.py` |
+| 停止 | `Ctrl+C` | `Ctrl+C` |
 
 ---
 
@@ -149,24 +323,43 @@ Invoke-RestMethod http://127.0.0.1:19090/health
 
 如果长时间未使用导致 Refresh Token 也过期，需要手动重新提取：
 
+**Windows：**
+
+```powershell
+# 1. 调试模式启动 WorkBuddy
+& "$env:LOCALAPPDATA\Programs\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9222
+
+# 2. 新开 PowerShell，重新提取 Token
+python extract_token.py --save
+
+# 3. 重启服务
+docker compose restart
+# 或者如果用 Python 直接运行，重启 start.ps1
+
+# 4. 验证
+Invoke-RestMethod http://127.0.0.1:19090/health
+```
+
+**macOS：**
+
 ```bash
-# 1. 调试模式启动 WorkBuddy（见「第二步」的平台对应命令）
+# 1. 调试模式启动 WorkBuddy
+/Applications/WorkBuddy.app/Contents/MacOS/Electron --remote-debugging-port=9222
 
 # 2. 重新提取 Token
-python3 extract_token.py --save      # macOS
-python extract_token.py --save       # Windows
+python3 extract_token.py --save
 
-# 3. 重启容器加载新 Token
+# 3. 重启服务
 docker compose restart
 
 # 4. 验证
-curl http://127.0.0.1:19090/health   # 应返回 status: ok
+curl http://127.0.0.1:19090/health
 ```
 
 ### 如何判断 Token 是否有效
 
 ```bash
-# 健康检查
+# 健康检查（Windows 用 Invoke-RestMethod，macOS 用 curl）
 curl http://127.0.0.1:19090/health
 ```
 
@@ -175,17 +368,6 @@ curl http://127.0.0.1:19090/health
 | `{"status":"ok", ...}` | 正常，Token 有效 |
 | `{"status":"degraded", "has_token":false, ...}` | 无 Token，需要提取 |
 | `{"status":"degraded", "expired":true, ...}` | Token 过期，等待自动续期或手动更新 |
-
----
-
-## 不用 Docker？
-
-也可以直接用 Python 运行：
-
-```bash
-pip3 install -r requirements.txt
-python3 server.py
-```
 
 ---
 
@@ -219,3 +401,12 @@ A: 网络代理（如 Clash）可能干扰 Docker 拉取镜像。关闭代理后
 
 **Q: 端口 19090 被占用？**
 A: 修改 `docker-compose.yml` 中的端口映射（如改为 `29090:19090`），Base URL 对应改为 `http://127.0.0.1:29090/v1`。
+
+**Q: Windows 上 PowerShell 提示"无法加载脚本"？**
+A: 执行策略限制。以管理员身份打开 PowerShell，执行：
+```powershell
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+**Q: Windows 任务计划程序启动后窗口一闪而过？**
+A: 这是正常现象，`-WindowStyle Hidden` 参数会隐藏窗口。服务在后台运行，通过 `Invoke-RestMethod http://127.0.0.1:19090/health` 验证。
