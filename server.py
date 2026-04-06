@@ -44,15 +44,36 @@ PROXY_API_KEY = os.getenv("PROXY_API_KEY", "wb-proxy-key")
 WB_API_BASE = os.getenv("WB_API_BASE", "https://copilot.tencent.com")
 CDP_URL = os.getenv("CDP_URL", "http://127.0.0.1:9222")
 
+
+def _detect_wb_version() -> str:
+    """Auto-detect genieVersion from local WorkBuddy installation."""
+    candidates = [
+        Path("/Applications/WorkBuddy.app/Contents/Resources/app/product.json"),
+        Path(os.path.expandvars(
+            r"%LOCALAPPDATA%\Programs\WorkBuddy\resources\app\product.json"
+        )),
+    ]
+    for p in candidates:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            v = data.get("genieVersion", "")
+            if v:
+                return v
+        except Exception:
+            continue
+    return ""
+
+
+WB_VERSION = os.getenv("WB_VERSION", "") or _detect_wb_version() or "4.8.1"
+
 HEADERS_TEMPLATE = {
-    "X-Requested-With": "XMLHttpRequest",
-    "X-IDE-Type": "VSCode",
-    "X-IDE-Name": "WorkBuddy",
-    "X-IDE-Version": "4.5.12",
-    "X-Product-Version": "4.5.12",
+    "X-IDE-Type": "CodeBuddyIDE",
+    "X-IDE-Name": "CodeBuddyIDE",
+    "X-IDE-Version": WB_VERSION,
+    "X-Product-Version": WB_VERSION,
     "X-Env-ID": "production",
-    "X-Product": "SaaS",
-    "User-Agent": "WorkBuddy/4.5.12 WorkBuddy/4.5.12",
+    "X-Requested-With": "XMLHttpRequest",
+    "User-Agent": f"CodeBuddyIDE/{WB_VERSION} coding-copilot/{WB_VERSION}",
 }
 
 
@@ -89,6 +110,7 @@ class TokenManager:
         self.user_id: str = ""
         self.enterprise_id: str = ""
         self.domain: str = ""
+        self.department_info: str = ""
         self._lock = asyncio.Lock()
 
     async def init(self):
@@ -176,7 +198,10 @@ class TokenManager:
             "X-Enterprise-Id": self.enterprise_id,
             "X-Tenant-Id": self.enterprise_id,
             "X-Request-ID": uuid.uuid4().hex,
+            "X-Request-Trace-Id": str(uuid.uuid4()),
         }
+        if self.department_info:
+            headers["X-Department-Info"] = self.department_info
         async with httpx.AsyncClient(verify=False) as client:
             resp = await client.post(
                 f"{WB_API_BASE}/v2/plugin/auth/token/refresh",
@@ -247,11 +272,13 @@ class TokenManager:
                 value = result.get("result", {}).get("result", {}).get("value", "")
                 if value:
                     session = json.loads(value)
-                    # 兼容新版（嵌套 auth）和旧版（扁平）结构
                     auth = session.get("auth", session)
                     if auth.get("accessToken"):
                         self.access_token = auth["accessToken"]
                         self.refresh_token = auth.get("refreshToken", "")
+                        account = session.get("account", {})
+                        if isinstance(account, dict):
+                            self.department_info = account.get("departmentFullName", "")
                         self._apply_claims()
                         log.info("Token extracted from CDP successfully")
                         self._log_token_info()
@@ -332,7 +359,7 @@ def _verify_api_key(request: Request):
 
 
 def _build_headers(access_token: str) -> dict:
-    return {
+    headers = {
         **HEADERS_TEMPLATE,
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
@@ -344,6 +371,9 @@ def _build_headers(access_token: str) -> dict:
         "X-Request-ID": uuid.uuid4().hex,
         "X-Request-Trace-Id": str(uuid.uuid4()),
     }
+    if token_mgr.department_info:
+        headers["X-Department-Info"] = token_mgr.department_info
+    return headers
 
 
 @app.get("/v1/models")
@@ -479,6 +509,7 @@ async def health():
 
 if __name__ == "__main__":
     log.info(f"Starting WorkBuddy proxy on port {PROXY_PORT}")
+    log.info(f"WB version: {WB_VERSION}")
     log.info(f"API key: {PROXY_API_KEY}")
     log.info(f"Upstream: {WB_API_BASE}")
     uvicorn.run(app, host="0.0.0.0", port=PROXY_PORT, log_level="info")
