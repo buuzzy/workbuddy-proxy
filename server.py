@@ -299,42 +299,43 @@ token_mgr = TokenManager()
 # Available models
 # ---------------------------------------------------------------------------
 MODELS = [
+    # DeepSeek
     {"id": "deepseek-r1", "name": "DeepSeek-R1"},
     {"id": "deepseek-v3", "name": "DeepSeek-V3"},
+    {"id": "deepseek-v3.2", "name": "DeepSeek-V3.2"},
     {"id": "deepseek-v3-1", "name": "DeepSeek-V3.1"},
     {"id": "deepseek-v3-0324", "name": "DeepSeek-V3-0324"},
     {"id": "deepseek-v3-1-volc", "name": "DeepSeek-V3-1-Terminus"},
     {"id": "deepseek-v3-0324-lkeap", "name": "DeepSeek-V3-0324-LKEAP"},
     {"id": "deepseek-r1-0528-lkeap", "name": "DeepSeek-R1-0528-LKEAP"},
     {"id": "deepseek-v3-2-volc-ioa", "name": "DeepSeek-V3-2-Volc"},
-    {"id": "gpt-5.1", "name": "GPT-5.1"},
-    {"id": "gpt-5.2", "name": "GPT-5.2"},
-    {"id": "gpt-5.3-codex", "name": "GPT-5.3-Codex"},
-    {"id": "gpt-5.4", "name": "GPT-5.4"},
-    {"id": "gpt-5.1-codex-max", "name": "GPT-5.1-Codex-Max"},
-    {"id": "gpt-5.2-codex", "name": "GPT-5.2-Codex"},
-    {"id": "claude-4.5", "name": "Claude-4.5-Sonnet"},
+    # GPT (5.1–5.4 removed: HTTP 400 on WorkBuddy backend)
+    # Claude
+    {"id": "claude-4.5", "name": "Claude-Sonnet-4.5"},
     {"id": "claude-opus-4.5", "name": "Claude-Opus-4.5"},
     {"id": "claude-opus-4.6", "name": "Claude-Opus-4.6"},
+    {"id": "claude-opus-4.6-1m", "name": "Claude-Opus-4.6 (1M context)"},
+    {"id": "claude-sonnet-4.6", "name": "Claude-Sonnet-4.6"},
+    {"id": "claude-sonnet-4.6-1m", "name": "Claude-Sonnet-4.6 (1M context)"},
     {"id": "claude-haiku-4.5", "name": "Claude-Haiku-4.5"},
-    {"id": "claude-3.7-sonnet", "name": "Claude-3.7-Sonnet"},
-    {"id": "claude-4.0-sonnet", "name": "Claude-4.0-Sonnet"},
-    {"id": "gemini-3.0-flash", "name": "Gemini-3.0-Flash"},
+    # Gemini (3.0-flash removed: returns empty responses)
     {"id": "gemini-3.0-pro", "name": "Gemini-3.0-Pro"},
     {"id": "gemini-3.1-flash-lite", "name": "Gemini-3.1-Flash-Lite"},
+    # GLM
     {"id": "glm-4.6", "name": "GLM-4.6"},
     {"id": "glm-4.7", "name": "GLM-4.7"},
+    {"id": "glm-4.7-ioa", "name": "GLM-4.7-IOA"},
     {"id": "glm-5.0-ioa", "name": "GLM-5.0"},
     {"id": "glm-5.0-turbo-ioa", "name": "GLM-5.0-Turbo"},
-    {"id": "glm-4.7-ioa", "name": "GLM-4.7-IOA"},
+    {"id": "glm-5v-turbo", "name": "GLM-5v-Turbo"},
+    {"id": "glm-5v-turbo-ioa", "name": "GLM-5v-Turbo-IOA"},
+    # Hunyuan
     {"id": "hunyuan-2.0-instruct", "name": "Hunyuan-2.0-Instruct"},
-    {"id": "hunyuan-turbos", "name": "Hunyuan-Turbos"},
-    {"id": "hunyuan-2.0-thinking-ioa", "name": "Hunyuan-2.0-Thinking"},
     {"id": "hunyuan-2.0-instruct-ioa", "name": "Hunyuan-2.0-Instruct-IOA"},
-    {"id": "kimi-k2", "name": "Kimi-K2"},
+    {"id": "hunyuan-2.0-thinking-ioa", "name": "Hunyuan-2.0-Thinking"},
+    # Kimi
     {"id": "kimi-k2.5-ioa", "name": "Kimi-K2.5"},
-    {"id": "minimax-m2.5-ioa", "name": "MiniMax-M2.5"},
-    {"id": "minimax-m2.7-ioa", "name": "MiniMax-M2.7"},
+    # Default
     {"id": "codewise-default-model-v2", "name": "Default (Codewise)"},
 ]
 

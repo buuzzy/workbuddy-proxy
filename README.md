@@ -8,15 +8,19 @@
 
 ## 可用模型
 
-| 类别 | 模型 ID |
-|------|---------|
-| **DeepSeek** | `deepseek-r1` · `deepseek-v3` · `deepseek-v3-1` · `deepseek-v3-0324` |
-| **Claude** | `claude-opus-4.6` · `claude-opus-4.5` · `claude-4.5` · `claude-haiku-4.5` |
-| **GPT** | `gpt-5.4` · `gpt-5.3-codex` · `gpt-5.2` · `gpt-5.1` |
-| **Gemini** | `gemini-3.0-pro` · `gemini-3.0-flash` · `gemini-3.1-flash-lite` |
-| **GLM** | `glm-5.0-turbo-ioa` · `glm-5.0-ioa` · `glm-4.7` · `glm-4.6` |
-| **混元** | `hunyuan-2.0-instruct` · `hunyuan-turbos` · `hunyuan-2.0-thinking-ioa` |
-| **其他** | `kimi-k2` · `kimi-k2.5-ioa` · `minimax-m2.7-ioa` 等 |
+共 **30** 个模型，全部经过可用性验证（2026-04-06）。
+
+| 类别 | 模型 ID | 备注 |
+|------|---------|------|
+| **DeepSeek** (9) | `deepseek-r1` · `deepseek-v3` · `deepseek-v3.2` · `deepseek-v3-1` · `deepseek-v3-0324` · `deepseek-v3-1-volc` · `deepseek-v3-0324-lkeap` · `deepseek-r1-0528-lkeap` · `deepseek-v3-2-volc-ioa` | 全部稳定 |
+| **Claude** (7) | `claude-opus-4.6` · `claude-opus-4.6-1m` · `claude-sonnet-4.6` · `claude-sonnet-4.6-1m` · `claude-opus-4.5` · `claude-4.5` · `claude-haiku-4.5` | 推荐首选；`-1m` 后缀为 1M 上下文版本 |
+| **Gemini** (2) | `gemini-3.0-pro` · `gemini-3.1-flash-lite` | `gemini-3.0-pro` 偶有间歇性空响应 |
+| **GLM** (7) | `glm-4.6` · `glm-4.7` · `glm-4.7-ioa` · `glm-5.0-ioa` · `glm-5.0-turbo-ioa` · `glm-5v-turbo` · `glm-5v-turbo-ioa` | `5v` 系列支持视觉 |
+| **混元** (3) | `hunyuan-2.0-instruct` · `hunyuan-2.0-instruct-ioa` · `hunyuan-2.0-thinking-ioa` | `thinking` 为推理模型 |
+| **Kimi** (1) | `kimi-k2.5-ioa` | |
+| **默认** (1) | `codewise-default-model-v2` | WorkBuddy 默认路由模型 |
+
+> 完整的模型测试报告参见 [MODEL_ANALYSIS.md](./MODEL_ANALYSIS.md)。
 
 ---
 
