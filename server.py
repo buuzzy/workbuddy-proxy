@@ -414,15 +414,9 @@ async def chat_completions(request: Request):
     model = body.get("model", "deepseek-v3")
     stream = body.get("stream", False)
 
-    wb_body = {
-        "model": model,
-        "messages": body.get("messages", []),
-        "stream": True,
-    }
-    for key in ("temperature", "max_tokens", "top_p", "stop",
-                "presence_penalty", "frequency_penalty"):
-        if key in body:
-            wb_body[key] = body[key]
+    wb_body = {k: v for k, v in body.items() if k != "stream"}
+    wb_body["stream"] = True
+    wb_body["model"] = model
 
     access_token = await token_mgr.get_token()
     if not access_token:
@@ -473,6 +467,8 @@ async def _stream_response(
 
 async def _non_stream_response(url: str, headers: dict, body: dict) -> JSONResponse:
     collected_content = ""
+    tool_calls_map: dict[int, dict] = {}
+    finish_reason = "stop"
     model = body.get("model", "unknown")
     usage = {}
 
@@ -489,13 +485,41 @@ async def _non_stream_response(url: str, headers: dict, body: dict) -> JSONRespo
                     continue
                 try:
                     chunk = json.loads(text)
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
-                    collected_content += delta.get("content", "")
+                    choice = chunk.get("choices", [{}])[0]
+                    delta = choice.get("delta", {})
+
+                    collected_content += delta.get("content") or ""
+
+                    for tc in delta.get("tool_calls") or []:
+                        idx = tc.get("index", 0)
+                        if idx not in tool_calls_map:
+                            tool_calls_map[idx] = {
+                                "id": tc.get("id", ""),
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        entry = tool_calls_map[idx]
+                        if tc.get("id"):
+                            entry["id"] = tc["id"]
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            entry["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            entry["function"]["arguments"] += fn["arguments"]
+
+                    fr = choice.get("finish_reason")
+                    if fr:
+                        finish_reason = fr
+
                     if chunk.get("usage"):
                         usage = chunk["usage"]
                     model = chunk.get("model", model)
-                except (json.JSONDecodeError, IndexError):
+                except (json.JSONDecodeError, IndexError, KeyError):
                     pass
+
+    message: dict = {"role": "assistant", "content": collected_content or None}
+    if tool_calls_map:
+        message["tool_calls"] = [tool_calls_map[i] for i in sorted(tool_calls_map)]
 
     return JSONResponse({
         "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
@@ -504,8 +528,8 @@ async def _non_stream_response(url: str, headers: dict, body: dict) -> JSONRespo
         "model": model,
         "choices": [{
             "index": 0,
-            "message": {"role": "assistant", "content": collected_content},
-            "finish_reason": "stop",
+            "message": message,
+            "finish_reason": finish_reason,
         }],
         "usage": usage,
     })
