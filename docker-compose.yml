@@ -6,8 +6,10 @@ services:
       - "19090:19090"
     volumes:
       - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    # 仅强制容器内访问宿主 CDP；端口与 API Key 由 .env 或 server.py 默认值决定
     environment:
-      - PROXY_PORT=19090
-      - PROXY_API_KEY=wb-proxy-key
-      - CDP_URL=http://host.docker.internal:9222
+      CDP_URL: http://host.docker.internal:9222
     restart: unless-stopped

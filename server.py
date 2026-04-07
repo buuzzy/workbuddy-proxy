@@ -31,6 +31,7 @@ import httpx
 import jwt
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 logging.basicConfig(
@@ -41,6 +42,15 @@ logging.basicConfig(
 log = logging.getLogger("wb-proxy")
 
 BASE_DIR = Path(__file__).parent
+
+# README / .env.example：本地与 Docker 均通过 .env 配置；已有环境变量优先（不 override）
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(BASE_DIR / ".env", override=False)
+except ImportError:
+    pass
+
 TOKEN_FILE = BASE_DIR / "data" / "token.json"
 
 PROXY_PORT = int(os.getenv("PROXY_PORT", "19090"))
@@ -378,10 +388,21 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="WorkBuddy Proxy", lifespan=lifespan)
 
+# Cherry Studio 等 Electron 应用可能从渲染进程请求本机 API，需放行 CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,  # 与 allow_origins=["*"] 不能同时为 True
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 def _verify_api_key(request: Request):
-    auth = request.headers.get("Authorization", "")
+    auth = request.headers.get("Authorization") or ""
     key = auth.replace("Bearer ", "").strip()
+    if not key:
+        key = (request.headers.get("X-API-Key") or "").strip()
     if key != PROXY_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid API key")
 

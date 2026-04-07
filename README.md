@@ -244,6 +244,50 @@ nssm stop WorkBuddyProxy      # 停止
 nssm remove WorkBuddyProxy    # 删除服务
 ```
 
+### 方案四：PM2 守护（适合已用 Node 生态、要崩溃自拉起）
+
+[PM2](https://pm2.keymetrics.io/) 可守护任意脚本，本仓库提供 `ecosystem.config.cjs`。
+
+**1. 安装 PM2（仅需一次）**
+
+```powershell
+npm install -g pm2
+```
+
+**2. 在项目根目录启动（后台 + 自动重启）**
+
+```powershell
+cd C:\path\to\workbuddy-proxy
+pm2 start ecosystem.config.cjs
+```
+
+**Windows 说明**：PM2 直接以 `python` 作解释器时，若 PATH 里是 **pyenv-win 的 `python.bat`**，子进程可能起不来。仓库已用 **`cmd.exe /c run-proxy.cmd`** 启动（与双击 `start.bat` 等价）。若仍异常，可编辑 `run-proxy.cmd`，把其中的 `python` 改成你的 **`python.exe` 绝对路径**（例如 `pyenv which python` 的输出）。
+
+**macOS / Linux**：使用 `run-proxy.sh`（`bash` 执行）；若 `python3` 不在 PATH，请编辑该脚本。
+
+端口、API Key 等仍由根目录 **`.env`**（或环境变量）提供，与直接运行 `python server.py` 一致。
+
+**3. 常用命令**
+
+| 操作 | 命令 |
+|------|------|
+| 查看进程 | `pm2 ls` |
+| 查看日志 | `pm2 logs workbuddy-proxy` |
+| 重启 | `pm2 restart workbuddy-proxy` |
+| 停止 | `pm2 stop workbuddy-proxy` |
+| 取消守护 | `pm2 delete workbuddy-proxy` |
+
+**4. 开机自启**
+
+```powershell
+pm2 save
+pm2 startup
+```
+
+按 PM2 输出的提示执行一条命令（Windows 下通常需要**以管理员身份**打开终端）。完成后，登录 Windows 时会自动拉起已 `save` 的进程列表。
+
+> **注意**：PM2 不会替你安装 Python 依赖；首次部署请先 `pip install -r requirements.txt`，并准备好 `data\token.json`（或调试模式 + `extract_token.py --save`）。
+
 ---
 
 ## 日常使用
@@ -266,6 +310,14 @@ nssm remove WorkBuddyProxy    # 删除服务
 |------|---------|-------|
 | 启动 | 双击 `start.bat` / `.\start.ps1` / `python server.py` | `./start.sh` / `python3 server.py` |
 | 停止 | `Ctrl+C` | `Ctrl+C` |
+
+### PM2 方式
+
+| 操作 | 命令 |
+|------|------|
+| 启动 | `pm2 start ecosystem.config.cjs` |
+| 状态 / 日志 | `pm2 ls` / `pm2 logs workbuddy-proxy` |
+| 重启 / 停止 | `pm2 restart workbuddy-proxy` / `pm2 stop workbuddy-proxy` |
 
 ---
 
