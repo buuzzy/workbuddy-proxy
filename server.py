@@ -82,10 +82,15 @@ HEADERS_TEMPLATE = {
     "X-IDE-Name": "CodeBuddyIDE",
     "X-IDE-Version": WB_VERSION,
     "X-Product-Version": WB_VERSION,
+    "X-Product": "SaaS",
     "X-Env-ID": "production",
     "X-Requested-With": "XMLHttpRequest",
     "User-Agent": f"CodeBuddyIDE/{WB_VERSION} coding-copilot/{WB_VERSION}",
 }
+
+REASONING_MODELS = {"deepseek-r1", "deepseek-r1-0528-lkeap", "hunyuan-2.0-thinking-ioa"}
+DEFAULT_TIMEOUT = int(os.getenv("WB_TIMEOUT", "120"))
+REASONING_TIMEOUT = int(os.getenv("WB_REASONING_TIMEOUT", "300"))
 
 
 def _parse_jwt_claims(token: str) -> dict:
@@ -354,10 +359,21 @@ MODELS = [
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
+http_pool: httpx.AsyncClient | None = None
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    global http_pool
+    http_pool = httpx.AsyncClient(
+        verify=False,
+        timeout=httpx.Timeout(DEFAULT_TIMEOUT, connect=10),
+        limits=httpx.Limits(max_connections=50, max_keepalive_connections=10),
+    )
     await token_mgr.init()
     yield
+    await http_pool.aclose()
+    http_pool = None
 
 
 app = FastAPI(title="WorkBuddy Proxy", lifespan=lifespan)
@@ -406,6 +422,20 @@ async def list_models(request: Request):
     }
 
 
+def _timeout_for(model: str) -> float:
+    return REASONING_TIMEOUT if model in REASONING_MODELS else DEFAULT_TIMEOUT
+
+
+async def _upstream_stream(url: str, headers: dict, body: dict, timeout: float):
+    """Open a streaming connection to upstream; yields (resp, None) or (None, error_str)."""
+    try:
+        req = http_pool.build_request("POST", url, headers=headers, json=body)
+        resp = await http_pool.send(req, stream=True)
+        return resp
+    except httpx.TimeoutException:
+        return None
+
+
 @app.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     _verify_api_key(request)
@@ -422,58 +452,131 @@ async def chat_completions(request: Request):
     if not access_token:
         raise HTTPException(status_code=503, detail="No valid WorkBuddy token")
 
-    headers = _build_headers(access_token)
     url = f"{WB_API_BASE}/v2/chat/completions"
+    timeout = _timeout_for(model)
+    t_start = time.monotonic()
 
     if stream:
         return StreamingResponse(
-            _stream_response(url, headers, wb_body),
+            _stream_response(url, wb_body, model, timeout),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
-    return await _non_stream_response(url, headers, wb_body)
+    return await _non_stream_response(url, wb_body, model, timeout, t_start)
 
 
+# ---------------------------------------------------------------------------
+# Streaming path
+# ---------------------------------------------------------------------------
 async def _stream_response(
-    url: str, headers: dict, body: dict
+    url: str, body: dict, model: str, timeout: float
 ) -> AsyncGenerator[str, None]:
-    async with httpx.AsyncClient(verify=False, timeout=120) as client:
-        try:
-            async with client.stream("POST", url, headers=headers, json=body) as resp:
-                if resp.status_code == 401:
-                    log.warning("Got 401, refreshing token...")
-                    await token_mgr.refresh()
-                    yield 'data: {"error":"Token expired, please retry"}\n\n'
-                    return
+    max_attempts = 2
+    for attempt in range(1, max_attempts + 1):
+        access_token = await token_mgr.get_token()
+        headers = _build_headers(access_token)
+        t_start = time.monotonic()
+        has_content = False
 
-                if resp.status_code != 200:
-                    error_body = await resp.aread()
-                    log.error(f"Upstream error {resp.status_code}: {error_body.decode()}")
-                    yield f"data: {json.dumps({'error': error_body.decode()})}\n\n"
-                    yield "data: [DONE]\n\n"
-                    return
-
-                async for line in resp.aiter_lines():
-                    if line.startswith("data: "):
-                        yield line + "\n\n"
-                    elif line.strip():
-                        yield f"data: {line}\n\n"
-
-        except httpx.ReadTimeout:
-            log.error("Upstream read timeout")
+        resp = await _upstream_stream(url, headers, body, timeout)
+        if resp is None:
+            log.error(f"[{model}] Upstream timeout (attempt {attempt})")
+            if attempt < max_attempts:
+                continue
             yield 'data: {"error":"upstream timeout"}\n\n'
             yield "data: [DONE]\n\n"
+            return
+
+        try:
+            if resp.status_code == 401:
+                await resp.aclose()
+                log.warning(f"[{model}] Got 401, refreshing token...")
+                await token_mgr.refresh()
+                if attempt < max_attempts:
+                    continue
+                yield 'data: {"error":"authentication failed"}\n\n'
+                yield "data: [DONE]\n\n"
+                return
+
+            if resp.status_code != 200:
+                error_body = await resp.aread()
+                log.error(f"[{model}] Upstream {resp.status_code}: {error_body.decode()[:200]}")
+                yield f"data: {json.dumps({'error': error_body.decode()})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            done_sent = False
+            async for line in resp.aiter_lines():
+                if line.startswith("data: "):
+                    if line == "data: [DONE]":
+                        done_sent = True
+                    else:
+                        has_content = True
+                    yield line + "\n\n"
+                elif line.strip():
+                    has_content = True
+                    yield f"data: {line}\n\n"
+
+            elapsed = time.monotonic() - t_start
+
+            if not has_content and attempt < max_attempts:
+                await resp.aclose()
+                log.warning(f"[{model}] Empty response, retrying... ({elapsed:.1f}s)")
+                await asyncio.sleep(1)
+                continue
+
+            if not done_sent:
+                yield "data: [DONE]\n\n"
+
+            log.info(f"[{model}] stream {elapsed:.1f}s")
+            return
+
+        except httpx.ReadTimeout:
+            log.error(f"[{model}] Read timeout during stream (attempt {attempt})")
+            if attempt < max_attempts:
+                await resp.aclose()
+                continue
+            yield 'data: {"error":"upstream timeout"}\n\n'
+            yield "data: [DONE]\n\n"
+            return
+        finally:
+            await resp.aclose()
 
 
-async def _non_stream_response(url: str, headers: dict, body: dict) -> JSONResponse:
-    collected_content = ""
-    tool_calls_map: dict[int, dict] = {}
-    finish_reason = "stop"
-    model = body.get("model", "unknown")
-    usage = {}
+# ---------------------------------------------------------------------------
+# Non-streaming path
+# ---------------------------------------------------------------------------
+async def _non_stream_response(
+    url: str, body: dict, model: str, timeout: float, t_start: float
+) -> JSONResponse:
+    max_attempts = 2
 
-    async with httpx.AsyncClient(verify=False, timeout=120) as client:
-        async with client.stream("POST", url, headers=headers, json=body) as resp:
+    for attempt in range(1, max_attempts + 1):
+        access_token = await token_mgr.get_token()
+        headers = _build_headers(access_token)
+
+        collected_content = ""
+        tool_calls_map: dict[int, dict] = {}
+        finish_reason = "stop"
+        resp_model = model
+        usage = {}
+
+        resp = await _upstream_stream(url, headers, body, timeout)
+        if resp is None:
+            log.error(f"[{model}] Upstream timeout (attempt {attempt})")
+            if attempt < max_attempts:
+                continue
+            raise HTTPException(status_code=504, detail="Upstream timeout")
+
+        try:
+            if resp.status_code == 401:
+                await resp.aclose()
+                log.warning(f"[{model}] Got 401, refreshing token...")
+                await token_mgr.refresh()
+                if attempt < max_attempts:
+                    continue
+                raise HTTPException(status_code=401, detail="Authentication failed")
+
             if resp.status_code != 200:
                 error_body = await resp.aread()
                 raise HTTPException(status_code=resp.status_code,
@@ -513,26 +616,41 @@ async def _non_stream_response(url: str, headers: dict, body: dict) -> JSONRespo
 
                     if chunk.get("usage"):
                         usage = chunk["usage"]
-                    model = chunk.get("model", model)
+                    resp_model = chunk.get("model", resp_model)
                 except (json.JSONDecodeError, IndexError, KeyError):
                     pass
 
-    message: dict = {"role": "assistant", "content": collected_content or None}
-    if tool_calls_map:
-        message["tool_calls"] = [tool_calls_map[i] for i in sorted(tool_calls_map)]
+        finally:
+            await resp.aclose()
 
-    return JSONResponse({
-        "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{
-            "index": 0,
-            "message": message,
-            "finish_reason": finish_reason,
-        }],
-        "usage": usage,
-    })
+        if not collected_content and not tool_calls_map and attempt < max_attempts:
+            log.warning(f"[{model}] Empty response, retrying...")
+            await asyncio.sleep(1)
+            continue
+
+        elapsed = time.monotonic() - t_start
+        prompt_t = usage.get("prompt_tokens", "?")
+        compl_t = usage.get("completion_tokens", "?")
+        log.info(f"[{model}] non-stream {elapsed:.1f}s  prompt={prompt_t} completion={compl_t}")
+
+        message: dict = {"role": "assistant", "content": collected_content or None}
+        if tool_calls_map:
+            message["tool_calls"] = [tool_calls_map[i] for i in sorted(tool_calls_map)]
+
+        return JSONResponse({
+            "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": resp_model,
+            "choices": [{
+                "index": 0,
+                "message": message,
+                "finish_reason": finish_reason,
+            }],
+            "usage": usage,
+        })
+
+    raise HTTPException(status_code=502, detail="Upstream returned empty response")
 
 
 @app.get("/health")
