@@ -26,27 +26,12 @@
 
 ## 前置准备
 
-根据你的操作系统，准备以下环境：
-
-### Windows 11
-
-| 项目 | 说明 |
-|------|------|
-| **Python 3.10+** | 从 [python.org](https://www.python.org/downloads/) 下载安装，**安装时勾选 "Add Python to PATH"** |
-| **Git** | 从 [git-scm.com](https://git-scm.com/download/win) 下载安装 |
-| **WorkBuddy** | 已安装并**至少登录过一次**（确保有有效会话） |
-| **Docker Desktop**（可选） | 如需 Docker 方式运行，从 [docker.com](https://www.docker.com/products/docker-desktop/) 安装，并在 Settings → General 中勾选 **"Start Docker Desktop when you sign in"** |
-
-> **验证 Python 安装**：打开 PowerShell，执行 `python --version`，应输出 `Python 3.10.x` 或更高版本。
-
-### macOS
-
-| 项目 | 说明 |
-|------|------|
-| **Python 3.10+** | 推荐通过 `brew install python` 安装 |
-| **Git** | macOS 自带，或通过 `brew install git` 安装 |
-| **WorkBuddy** | 已安装并**至少登录过一次** |
-| **Docker Desktop**（可选） | 从 [docker.com](https://www.docker.com/products/docker-desktop/) 安装 |
+| 项目 | Windows | macOS |
+|------|---------|-------|
+| **Python 3.10+** | [python.org](https://www.python.org/downloads/)，**安装时勾选 "Add Python to PATH"** | `brew install python` |
+| **Git** | [git-scm.com](https://git-scm.com/download/win) | macOS 自带 |
+| **WorkBuddy** | 已安装并**至少登录过一次** | 同左 |
+| **Docker**（可选） | [Docker Desktop](https://www.docker.com/products/docker-desktop/) | 同左 |
 
 ---
 
@@ -61,26 +46,27 @@ cd workbuddy-proxy
 
 ---
 
-### 第二步：提取 Token（首次 & Token 失效时）
+### 第二步：环境配置 & Token 提取
 
-Token 的有效期约 **1 年**，正常情况下提取一次即可长期使用。
+Token 有效期约 **1 年**，正常情况下提取一次即可长期使用。
 
 <details>
-<summary><b>Windows（PowerShell）</b></summary>
+<summary><b>Windows — 一键配置（推荐）</b></summary>
+
+双击 `setup.bat`，按提示操作即可自动完成依赖安装和 Token 提取。
+
+如果需要手动操作：
 
 ```powershell
 # 1. 以调试模式启动 WorkBuddy
 & "$env:LOCALAPPDATA\Programs\WorkBuddy\WorkBuddy.exe" --remote-debugging-port=9222
 
-# 如果上面的路径不对，可以这样查找 WorkBuddy 位置：
-# Get-Command WorkBuddy -ErrorAction SilentlyContinue | Select-Object Source
-# 或者右键 WorkBuddy 快捷方式 → 属性 → 查看「目标」路径
-# 常见路径：
-#   C:\Users\<用户名>\AppData\Local\Programs\WorkBuddy\WorkBuddy.exe
+# 常见安装路径：
+#   %LOCALAPPDATA%\Programs\WorkBuddy\WorkBuddy.exe
 #   C:\Program Files\WorkBuddy\WorkBuddy.exe
 
-# 2. 新开一个 PowerShell 窗口，安装依赖并提取 Token
-python -m pip install httpx websockets pyjwt
+# 2. 新开一个窗口，安装依赖并提取 Token
+python -m pip install -r requirements.txt
 python extract_token.py --save
 
 # 3. 看到 "已保存到 data\token.json" 后，可以关闭 WorkBuddy
@@ -89,14 +75,14 @@ python extract_token.py --save
 </details>
 
 <details>
-<summary><b>macOS（Terminal）</b></summary>
+<summary><b>macOS — 手动配置</b></summary>
 
 ```bash
 # 1. 以调试模式启动 WorkBuddy
 /Applications/WorkBuddy.app/Contents/MacOS/Electron --remote-debugging-port=9222
 
 # 2. 新开一个终端，安装依赖并提取 Token
-pip3 install httpx websockets pyjwt
+pip3 install -r requirements.txt
 python3 extract_token.py --save
 
 # 3. 看到 "已保存到 data/token.json" 后，可以关闭 WorkBuddy
@@ -113,9 +99,17 @@ python3 extract_token.py --save
 
 ### 第三步：启动服务
 
-有两种方式可选：**Docker（推荐）** 或 **直接运行 Python**。
+#### 方式一：直接运行（推荐本地使用）
 
-#### 方式一：Docker（推荐）
+| 系统 | 命令 | 说明 |
+|------|------|------|
+| **Windows** | 双击 `start.bat` | 最简单，无需任何配置 |
+| **Windows** | `.\start.ps1` 或 `.\start.ps1 -Port 8080` | PowerShell 用户 |
+| **macOS** | `./start.sh` 或 `./start.sh --port 8080` | |
+
+脚本会自动检查 Python、安装依赖、提取 Token（如需要），然后启动服务。
+
+#### 方式二：Docker
 
 适用于 Windows 和 macOS，安装好 Docker Desktop 后：
 
@@ -123,51 +117,16 @@ python3 extract_token.py --save
 docker compose up -d
 ```
 
-看到 `Container workbuddy-proxy Started` 即表示启动成功。
-
-#### 方式二：直接运行 Python
-
-<details>
-<summary><b>Windows</b></summary>
-
-```powershell
-# 安装依赖
-python -m pip install -r requirements.txt
-
-# 启动服务
-python server.py
-
-# 或使用一键启动脚本
-.\start.ps1
-.\start.ps1 -Port 8080   # 指定端口
-```
-
-</details>
-
-<details>
-<summary><b>macOS</b></summary>
-
-```bash
-# 安装依赖
-pip3 install -r requirements.txt
-
-# 启动服务
-python3 server.py
-
-# 或使用一键启动脚本
-./start.sh
-./start.sh --port 8080   # 指定端口
-```
-
-</details>
-
 #### 验证服务状态
 
-```powershell
+```bash
+# macOS / Linux
+curl http://127.0.0.1:19090/health
+
 # Windows PowerShell
 Invoke-RestMethod http://127.0.0.1:19090/health
 
-# macOS / Linux
+# Windows CMD
 curl http://127.0.0.1:19090/health
 ```
 
@@ -177,7 +136,7 @@ curl http://127.0.0.1:19090/health
 
 ### 第四步：配置第三方工具
 
-在 Cherry Studio / ChatGPT-Next-Web / Cursor 等工具中：
+在 Cherry Studio / ChatGPT-Next-Web / Cursor / OpenClaw 等工具中：
 
 | 配置项 | 值 |
 |--------|------|
@@ -303,9 +262,9 @@ nssm remove WorkBuddyProxy    # 删除服务
 
 ### Python 直接运行方式
 
-| 操作 | Windows (PowerShell) | macOS (Terminal) |
-|------|---------------------|------------------|
-| 启动 | `.\start.ps1` 或 `python server.py` | `./start.sh` 或 `python3 server.py` |
+| 操作 | Windows | macOS |
+|------|---------|-------|
+| 启动 | 双击 `start.bat` / `.\start.ps1` / `python server.py` | `./start.sh` / `python3 server.py` |
 | 停止 | `Ctrl+C` | `Ctrl+C` |
 
 ---

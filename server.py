@@ -17,11 +17,15 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import httpx
 import jwt
@@ -48,16 +52,23 @@ CDP_URL = os.getenv("CDP_URL", "http://127.0.0.1:9222")
 def _detect_wb_version() -> str:
     """Auto-detect genieVersion from local WorkBuddy installation."""
     candidates = [
+        # macOS
         Path("/Applications/WorkBuddy.app/Contents/Resources/app/product.json"),
-        Path(os.path.expandvars(
-            r"%LOCALAPPDATA%\Programs\WorkBuddy\resources\app\product.json"
-        )),
+        # Windows — common locations
+        Path(os.path.expandvars(r"%LOCALAPPDATA%\Programs\WorkBuddy\resources\app\product.json")),
+        Path(os.path.expandvars(r"%ProgramFiles%\WorkBuddy\resources\app\product.json")),
+        Path(os.path.expandvars(r"%ProgramFiles(x86)%\WorkBuddy\resources\app\product.json")),
+        Path(os.path.expandvars(r"%APPDATA%\WorkBuddy\resources\app\product.json")),
+        # Linux (snap / deb)
+        Path(os.path.expanduser("~/.local/share/WorkBuddy/resources/app/product.json")),
+        Path("/opt/WorkBuddy/resources/app/product.json"),
     ]
     for p in candidates:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             v = data.get("genieVersion", "")
             if v:
+                log.info(f"Detected WorkBuddy {v} at {p.parent}")
                 return v
         except Exception:
             continue
@@ -138,7 +149,7 @@ class TokenManager:
     def _load_from_file(self):
         if TOKEN_FILE.exists():
             try:
-                data = json.loads(TOKEN_FILE.read_text())
+                data = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
                 self.access_token = data.get("access_token", "")
                 self.refresh_token = data.get("refresh_token", "")
                 if self.access_token:
@@ -152,7 +163,7 @@ class TokenManager:
             "access_token": self.access_token,
             "refresh_token": self.refresh_token,
             "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        }, indent=2))
+        }, indent=2), encoding="utf-8")
 
     async def get_token(self) -> str:
         if self._is_expired():
