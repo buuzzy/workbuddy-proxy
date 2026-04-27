@@ -322,6 +322,55 @@ token_mgr = TokenManager()
 
 
 # ---------------------------------------------------------------------------
+# Cursor model name mapping
+# Cursor validates model names server-side; only its built-in names pass.
+# This map translates Cursor names → WorkBuddy model IDs.
+# ---------------------------------------------------------------------------
+CURSOR_TO_WB_MAP: dict[str, str] = {
+    # Claude
+    "claude-4.6-opus-high": "claude-opus-4.6",
+    "claude-4.6-opus-max": "claude-opus-4.6-1m",
+    "claude-4.6-opus-high-thinking": "claude-opus-4.6",
+    "claude-4.6-opus-high-thinking-fast": "claude-opus-4.6",
+    "claude-4.6-opus-max-thinking": "claude-opus-4.6-1m",
+    "claude-4.6-opus-max-thinking-fast": "claude-opus-4.6-1m",
+    "claude-4.6-sonnet-medium": "claude-sonnet-4.6",
+    "claude-4.6-sonnet-medium-thinking": "claude-sonnet-4.6-1m",
+    "claude-4.5-opus-high": "claude-opus-4.5",
+    "claude-4.5-opus-high-thinking": "claude-opus-4.5",
+    "claude-4.5-sonnet": "claude-4.5",
+    "claude-4.5-sonnet-thinking": "claude-4.5",
+    "claude-4.5-haiku": "claude-haiku-4.5",
+    "claude-4.5-haiku-thinking": "claude-haiku-4.5",
+    "claude-opus-4.6": "claude-opus-4.6",
+    # Gemini
+    "gemini-3.1-pro": "gemini-3.0-pro",
+    "gemini-3-flash": "gemini-3.1-flash-lite",
+    # Kimi
+    "kimi-k2.5": "kimi-k2.5-ioa",
+}
+
+# Reverse map: WB model ID → preferred Cursor alias (for /v1/models)
+WB_TO_CURSOR_MAP: dict[str, str] = {
+    "claude-opus-4.6": "claude-4.6-opus-high",
+    "claude-opus-4.6-1m": "claude-4.6-opus-max",
+    "claude-sonnet-4.6": "claude-4.6-sonnet-medium",
+    "claude-sonnet-4.6-1m": "claude-4.6-sonnet-medium-thinking",
+    "claude-opus-4.5": "claude-4.5-opus-high",
+    "claude-4.5": "claude-4.5-sonnet",
+    "claude-haiku-4.5": "claude-4.5-haiku",
+    "gemini-3.0-pro": "gemini-3.1-pro",
+    "gemini-3.1-flash-lite": "gemini-3-flash",
+    "kimi-k2.5-ioa": "kimi-k2.5",
+}
+
+
+def resolve_model(model: str) -> str:
+    """Resolve Cursor model name to WorkBuddy model ID. Pass through if no mapping."""
+    return CURSOR_TO_WB_MAP.get(model, model)
+
+
+# ---------------------------------------------------------------------------
 # Available models
 # ---------------------------------------------------------------------------
 MODELS = [
@@ -428,19 +477,39 @@ def _build_headers(access_token: str) -> dict:
 @app.get("/v1/models")
 async def list_models(request: Request):
     _verify_api_key(request)
-    return {
-        "object": "list",
-        "data": [
-            {
+
+    # Build model list: original WB models + Cursor-compatible aliases
+    seen_ids: set[str] = set()
+    data = []
+
+    # First: add Cursor-compatible aliases for mapped models
+    for cursor_name, wb_id in CURSOR_TO_WB_MAP.items():
+        if cursor_name not in seen_ids:
+            seen_ids.add(cursor_name)
+            # Find display name from MODELS list
+            wb_model = next((m for m in MODELS if m["id"] == wb_id), None)
+            display_name = wb_model["name"] if wb_model else cursor_name
+            data.append({
+                "id": cursor_name,
+                "object": "model",
+                "created": 1700000000,
+                "owned_by": "workbuddy",
+                "name": f"{display_name} (Cursor)",
+            })
+
+    # Then: add original WB models (for non-Cursor clients like OpenClaw)
+    for m in MODELS:
+        if m["id"] not in seen_ids:
+            seen_ids.add(m["id"])
+            data.append({
                 "id": m["id"],
                 "object": "model",
                 "created": 1700000000,
                 "owned_by": "workbuddy",
                 "name": m["name"],
-            }
-            for m in MODELS
-        ],
-    }
+            })
+
+    return {"object": "list", "data": data}
 
 
 def _timeout_for(model: str) -> float:
@@ -462,8 +531,12 @@ async def chat_completions(request: Request):
     _verify_api_key(request)
 
     body = await request.json()
-    model = body.get("model", "deepseek-v3")
+    raw_model = body.get("model", "deepseek-v3")
+    model = resolve_model(raw_model)  # Cursor name → WB model ID
     stream = body.get("stream", False)
+
+    if raw_model != model:
+        log.info(f"[Model] Mapped: {raw_model} → {model}")
 
     wb_body = {k: v for k, v in body.items() if k != "stream"}
     wb_body["stream"] = True
